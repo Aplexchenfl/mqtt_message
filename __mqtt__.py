@@ -27,16 +27,16 @@ class mqtt_datatranslate(threading.Thread):
         self.__connect__()
 
     def __connect__(self):
-        print((self.config))
+        #print((self.config))
         self.__mqtt_id = time.strftime('%Y%m%d%H%M%S',time.localtime(time.time()))
         #print(self.client_id);
         self.__mqtt__ = mqtt.Client(self.__mqtt_id)
-        self.__mqtt__.username_pw_set("baidumap/iotmap", "bjBb+EUd5rwfo9fBaZUMlwG8psde+abMx35m/euTUfE=")
+        self.__mqtt__.username_pw_set(self.config["username"], self.config["passwd"])
         self.__mqtt__.on_connect = self.on_connect
 
     def on_connect(self, client, userdata, flags, rc):
-        print("Connected with result code "+str(rc))
-        client.subscribe("computex/iot/5100/backend")
+        #print("Connected with result code "+str(rc))
+        client.subscribe("computex/iot/" + str(self.config["device"])  + "/backend")
 
     def on_message(self, client, userdata, msg):
         ctrl_data = [0x1, 0x0, 0x0]
@@ -45,33 +45,15 @@ class mqtt_datatranslate(threading.Thread):
         if "gateway_id" in js_code :
             ctrl_data[1] = js_code["funcode"]
             ctrl_data[2] = js_code["value"]
-            print(ctrl_data)
+            #print(ctrl_data)
 
             self.__mutex.acquire()
             self.ser.write(ctrl_data)
             self.__mutex.release()
 
-        #print(msg.topic+" " + ":" + str(msg.payload))
-
-        #print(type(msg.payload))
-        #print(json.loads(msg.payload.decode('utf8')))
-        #print(type(json.loads(msg.payload.decode('utf8'))))
-        #js_code = json.loads(msg.payload.decode('utf8'))
-        #print(js_code)
-
-        #if "name" in js_code :
-        #    print(js_code["name"])
-        #elif "gateway_id" in js_code :
-        #    print(js_code["gateway_id"])
-        #    print(js_code["funcode"])
-        #    print(js_code["device_id"])
-        #    print(js_code["value"])
-        #else :
-        #    print("dict error")
-
     def recv_mqttmsg(self):
         self.__mqtt__.on_message = self.on_message
-        self.__mqtt__.connect("baidumap.mqtt.iot.gz.baidubce.com", 1883)
+        self.__mqtt__.connect(self.config["wss_addr"], 1883)
         self.__mqtt__.loop_forever()
 
     def send_mqttmsg(self):
@@ -85,9 +67,9 @@ class mqtt_datatranslate(threading.Thread):
                 send_msg["funcode"] = self.recvmsg[1]
                 send_msg["value"] = 1 << (self.recvmsg[2] - 1)
 
-                print(send_msg)
-                self.__mqtt__.connect("baidumap.mqtt.iot.gz.baidubce.com", 1883)
-                self.__mqtt__.publish("computex/iot/5100/DataTransfer", json.dumps(send_msg))
+                #print(send_msg)
+                self.__mqtt__.connect(self.config["wss_addr"], 1883)
+                self.__mqtt__.publish("computex/iot/" + str(self.config["device"])  +  "/DataTransfer", json.dumps(send_msg))
             time.sleep(1)
 
     def run(self):
