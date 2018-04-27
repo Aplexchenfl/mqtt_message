@@ -1,0 +1,8 @@
+{
+    "port" : "/dev/ttyO1",
+    "baudrate" : 2400,
+    "timeout" : 0.5,
+    "bytesize" : 8,
+    "stopbits" : 1,
+    "parity" : "N"
+}
