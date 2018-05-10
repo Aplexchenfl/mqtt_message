@@ -7,6 +7,7 @@ from config.config import *
 import threading
 from serial_py.serial_test import *
 import serial
+import math
 
 send_msg = {
         'device_id': 1,
@@ -24,19 +25,18 @@ class mqtt_datatranslate(threading.Thread):
         self.config = config.config
         self.sendflag = sendflag
         self.ser = ser
-        self.__connect__()
 
     def __connect__(self):
         #print((self.config))
-        self.__mqtt_id = time.strftime('%Y%m%d%H%M%S',time.localtime(time.time()))
-        #print(self.client_id);
+        self.__mqtt_id = str(math.floor(time.time() + self.sendflag))
+        #print(self.__mqtt_id);
         self.__mqtt__ = mqtt.Client(self.__mqtt_id)
         self.__mqtt__.username_pw_set(self.config["username"], self.config["passwd"])
         self.__mqtt__.on_connect = self.on_connect
 
     def on_connect(self, client, userdata, flags, rc):
         #print("Connected with result code "+str(rc))
-        client.subscribe("computex/iot/" + str(self.config["device"])  + "/backend")
+        client.subscribe("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"]  + "/backend")
 
     def on_message(self, client, userdata, msg):
         ctrl_data = [0x1, 0x0, 0x0]
@@ -47,9 +47,9 @@ class mqtt_datatranslate(threading.Thread):
             ctrl_data[2] = js_code["value"]
             #print(ctrl_data)
 
-            self.__mutex.acquire()
+            #self.__mutex.acquire()
             self.ser.write(ctrl_data)
-            self.__mutex.release()
+            #self.__mutex.release()
 
     def recv_mqttmsg(self):
         self.__mqtt__.on_message = self.on_message
@@ -57,22 +57,27 @@ class mqtt_datatranslate(threading.Thread):
         self.__mqtt__.loop_forever()
 
     def send_mqttmsg(self):
+        self.__mqtt__.connect(self.config["wss_addr"], 1883)
         while True :
 
-            self.__mutex.acquire()
-            self.recvmsg = self.ser.read(size = 3)
-            self.__mutex.release()
+            #self.__mutex.acquire()
+            self.recvmsg = self.ser.read(size = 4)
+            #self.ser.reset_input_buffer()
+            #self.__mutex.release()
 
-            if len(self.recvmsg) == 3 :
+            if len(self.recvmsg) == 4 :
                 send_msg["funcode"] = self.recvmsg[1]
-                send_msg["value"] = 1 << (self.recvmsg[2] - 1)
+                send_msg["gateway_id"] = self.config["gateway_id"]
+                if self.recvmsg[1] == 4 :
+                    send_msg["value"] = self.recvmsg[2] + (self.recvmsg[3] / 10)
+                else :
+                    send_msg["value"] = self.recvmsg[2]
 
                 #print(send_msg)
-                self.__mqtt__.connect(self.config["wss_addr"], 1883)
-                self.__mqtt__.publish("computex/iot/" + str(self.config["device"])  +  "/DataTransfer", json.dumps(send_msg))
-            time.sleep(1)
+                self.__mqtt__.publish("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"] + "/DataTransfer", json.dumps(send_msg))
 
     def run(self):
+        self.__connect__()
         if self.sendflag :
             self.recv_mqttmsg()
         else:
@@ -81,7 +86,7 @@ class mqtt_datatranslate(threading.Thread):
 if __name__ == '__main__':
     ser_config = serial_port()
 
-    ser = serial.Serial(ser_config.config["port"], ser_config.config["baudrate"], timeout = ser_config.config["timeout"])
+    ser = serial.Serial(ser_config.config["port"], ser_config.config["baudrate"])
 
     mqtt_recv = mqtt_datatranslate(1, "mqtt_recv_thread", 1, ser);
     mqtt_send = mqtt_datatranslate(2, "mqtt_send_thread", 0, ser);

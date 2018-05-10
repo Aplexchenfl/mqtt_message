@@ -4,5 +4,6 @@
     "timeout" : 0.5,
     "bytesize" : 8,
     "stopbits" : 1,
-    "parity" : "N"
+    "parity" : "N",
+    "timeout" : 2
 }

@@ -1,7 +1,9 @@
 {
+    "gateway_id" : "5100",
     "device"    : 5100,
     "wss_addr"  : "baidumap.mqtt.iot.gz.baidubce.com",
     "wss_port"  : 1883,
     "username"  : "baidumap/iotmap",
-    "passwd"    : "bjBb+EUd5rwfo9fBaZUMlwG8psde+abMx35m/euTUfE="
+    "passwd"    : "bjBb+EUd5rwfo9fBaZUMlwG8psde+abMx35m/euTUfE=",
+    "city": "Beijing"
 }
