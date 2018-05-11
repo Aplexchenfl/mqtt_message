@@ -33,10 +33,24 @@ class mqtt_datatranslate(threading.Thread):
         self.__mqtt__ = mqtt.Client(self.__mqtt_id)
         self.__mqtt__.username_pw_set(self.config["username"], self.config["passwd"])
         self.__mqtt__.on_connect = self.on_connect
+        self.__mqtt__.on_disconnect = self.on_disconnect
 
     def on_connect(self, client, userdata, flags, rc):
         #print("Connected with result code "+str(rc))
-        client.subscribe("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"]  + "/backend")
+        try :
+            client.subscribe("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"]  + "/backend")
+        except :
+            print("subscribe error")
+        else:
+            print("subscribe ok")
+
+
+    def on_disconnect(self, client, userdata, rc):
+        if rc != 0:
+            print("disconect start")
+            self.try_connect()
+            print("disconect stop")
+            time.sleep(2)
 
     def on_message(self, client, userdata, msg):
         ctrl_data = [0x1, 0x0, 0x0]
@@ -53,16 +67,29 @@ class mqtt_datatranslate(threading.Thread):
 
     def recv_mqttmsg(self):
         self.__mqtt__.on_message = self.on_message
-        self.__mqtt__.connect(self.config["wss_addr"], 1883)
+        self.try_connect();
         self.__mqtt__.loop_forever()
 
-    def send_mqttmsg(self):
-        self.__mqtt__.connect(self.config["wss_addr"], 1883)
-        while True :
+    def try_connect(self):
+        while True:
+            try :
+                print("connect start")
+                self.__mqtt__.connect(self.config["wss_addr"], 1883)
+                print(self.sendflag)
+            except :
+                print("connect error")
+                time.sleep(2)
+            else:
+                print("connect success")
+                break
 
+    def send_mqttmsg(self):
+        self.try_connect()
+
+        while True :
             #self.__mutex.acquire()
             self.recvmsg = self.ser.read(size = 4)
-            #self.ser.reset_input_buffer()
+            self.ser.reset_input_buffer()
             #self.__mutex.release()
 
             if len(self.recvmsg) == 4 :
@@ -74,7 +101,10 @@ class mqtt_datatranslate(threading.Thread):
                     send_msg["value"] = self.recvmsg[2]
 
                 #print(send_msg)
-                self.__mqtt__.publish("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"] + "/DataTransfer", json.dumps(send_msg))
+                try :
+                    self.__mqtt__.publish("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"] + "/DataTransfer", json.dumps(send_msg))
+                except :
+                    print("publish error")
 
     def run(self):
         self.__connect__()
