@@ -17,26 +17,27 @@ send_msg = {
         }
 
 class mqtt_datatranslate(threading.Thread):
-    def __init__(self, threadID, name, sendflag, ser):
+    def __init__(self, name, ser):
         threading.Thread.__init__(self)
         self.__mutex = threading.Lock()
-        self.threadID = threadID
         self.__name = name
         self.config = config.config
-        self.sendflag = sendflag
         self.ser = ser
+        self.init_connect()
 
-    def __connect__(self):
-        #print((self.config))
-        self.__mqtt_id = str(math.floor(time.time() + self.sendflag))
-        #print(self.__mqtt_id);
+    def init_connect(self):
+        self.__mutex.acquire()
+        self.__mqtt_id = str(math.floor(time.time()))
         self.__mqtt__ = mqtt.Client(self.__mqtt_id)
         self.__mqtt__.username_pw_set(self.config["username"], self.config["passwd"])
         self.__mqtt__.on_connect = self.on_connect
         self.__mqtt__.on_disconnect = self.on_disconnect
+        self.__mqtt__.on_message = self.sendmsg_to_ser
+        self.__mutex.release()
+
+        self.try_connect_to_mqtthub()
 
     def on_connect(self, client, userdata, flags, rc):
-        #print("Connected with result code "+str(rc))
         try :
             client.subscribe("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"]  + "/backend")
         except :
@@ -44,15 +45,14 @@ class mqtt_datatranslate(threading.Thread):
         else:
             print("subscribe ok")
 
-
     def on_disconnect(self, client, userdata, rc):
         if rc != 0:
             print("disconect start")
-            self.try_connect()
+            self.try_connect_to_mqtthub()
             print("disconect stop")
             time.sleep(2)
 
-    def on_message(self, client, userdata, msg):
+    def sendmsg_to_ser(self, client, userdata, msg):
         ctrl_data = [0x1, 0x0, 0x0]
         js_code = json.loads(msg.payload.decode('utf8'))
 
@@ -61,21 +61,17 @@ class mqtt_datatranslate(threading.Thread):
             ctrl_data[2] = js_code["value"]
             #print(ctrl_data)
 
-            #self.__mutex.acquire()
             self.ser.write(ctrl_data)
-            #self.__mutex.release()
 
-    def recv_mqttmsg(self):
-        self.__mqtt__.on_message = self.on_message
-        self.try_connect();
-        self.__mqtt__.loop_forever()
+    def sendmsg_to_mqtthub(self, send_msg):
+        self.__mqtt__.publish("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"] + "/DataTransfer", json.dumps(send_msg))
 
-    def try_connect(self):
+
+    def try_connect_to_mqtthub(self):
         while True:
             try :
                 print("connect start")
                 self.__mqtt__.connect(self.config["wss_addr"], 1883)
-                print(self.sendflag)
             except :
                 print("connect error")
                 time.sleep(2)
@@ -83,48 +79,44 @@ class mqtt_datatranslate(threading.Thread):
                 print("connect success")
                 break
 
-    def send_mqttmsg(self):
-        self.try_connect()
+    def run(self):
+        self.__mqtt__.loop_forever()
 
+
+class mqtt_run(threading.Thread):
+    def __init__(self, name, ser):
+        threading.Thread.__init__(self)
+        self.ser = ser
+        self.name = name
+        self.Mqtt_Datatranslate = mqtt_datatranslate(name, ser)
+        self.Mqtt_Datatranslate.start()
+        #self.Mqtt_Datatranslate.join()
+
+    def run(self):
         while True :
-            #self.__mutex.acquire()
             self.recvmsg = self.ser.read(size = 4)
             self.ser.reset_input_buffer()
-            #self.__mutex.release()
 
             if len(self.recvmsg) == 4 :
                 send_msg["funcode"] = self.recvmsg[1]
-                send_msg["gateway_id"] = self.config["gateway_id"]
+                send_msg["gateway_id"] = config.config["gateway_id"]
                 if self.recvmsg[1] == 4 :
                     send_msg["value"] = self.recvmsg[2] + (self.recvmsg[3] / 10)
                 else :
                     send_msg["value"] = self.recvmsg[2]
 
-                #print(send_msg)
-                try :
-                    self.__mqtt__.publish("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"] + "/DataTransfer", json.dumps(send_msg))
-                except :
-                    print("publish error")
+                self.Mqtt_Datatranslate.sendmsg_to_mqtthub(send_msg)
 
-    def run(self):
-        self.__connect__()
-        if self.sendflag :
-            self.recv_mqttmsg()
-        else:
-            self.send_mqttmsg();
 
 if __name__ == '__main__':
     ser_config = serial_port()
 
     ser = serial.Serial(ser_config.config["port"], ser_config.config["baudrate"])
 
-    mqtt_recv = mqtt_datatranslate(1, "mqtt_recv_thread", 1, ser);
-    mqtt_send = mqtt_datatranslate(2, "mqtt_send_thread", 0, ser);
+    mqtt_thread = mqtt_run("mqtt_thread", ser)
 
-    mqtt_recv.start()
-    mqtt_send.start()
+    mqtt_thread.start()
 
-    mqtt_recv.join()
-    mqtt_send.join()
+    mqtt_thread.join()
 
     ser.close()
