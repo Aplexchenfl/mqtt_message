@@ -39,7 +39,8 @@ class mqtt_datatranslate(threading.Thread):
 
     def on_connect(self, client, userdata, flags, rc):
         try :
-            client.subscribe("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"]  + "/backend")
+            client.subscribe("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"]  + "/ledBackend")
+            client.subscribe("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"]  + "/numBackend")
         except :
             print("subscribe error")
         else:
@@ -64,8 +65,14 @@ class mqtt_datatranslate(threading.Thread):
             self.ser.write(ctrl_data)
 
     def sendmsg_to_mqtthub(self, send_msg):
-        self.__mqtt__.publish("computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"] + "/DataTransfer", json.dumps(send_msg))
+        if send_msg["funcode"] == 1 :
+            chat = "computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"] + "/btnData"
+        elif send_msg["funcode"] == 4 :
+            chat = "computex/" + self.config["city"] + "/iot/" + self.config["gateway_id"] + "/tempData"
+        else :
+            pass
 
+        self.__mqtt__.publish(chat, payload = json.dumps(send_msg), retain = True)
 
     def try_connect_to_mqtthub(self):
         while True:
